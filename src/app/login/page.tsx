@@ -119,6 +119,8 @@ export default function LoginPage() {
     setIsLoading(false);
     if (!res.success && res.error) {
       setErrorMessage(res.error);
+    } else if (res.success) {
+      router.push("/onboarding");
     }
   };
 
