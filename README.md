@@ -27,8 +27,8 @@
 | Resource | Link |
 | :--- | :--- |
 | **Live Web App** | 🔗 [**Launch LUNA AI (https://luna-ai-self-eta.vercel.app)**](https://luna-ai-self-eta.vercel.app/) |
-| **Interactive Video Avatar** | 🎥 [Tavus Deployment Preview](https://maker.tavus.io/deployments/a53a81d3-78c1-4fba-bd15-2421a96e51d4) |
 | **Source Code** | 💻 [GitHub Repository](https://github.com/Naila618/luna-ai-) |
+| **Video Platform** | 🎥 [Tavus Platform](https://tavus.io) |
 
 ---
 
@@ -180,13 +180,13 @@ NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
 NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
 NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=your_measurement_id
 
-# Tavus Conversational Video Avatar
+# Tavus Conversational Video Avatar (Server-side)
 TAVUS_API_KEY=your_tavus_api_key
 TAVUS_REPLICA_ID=your_replica_id
 TAVUS_PERSONA_ID=your_persona_id
-TAVUS_DEPLOYMENT_ID=a53a81d3-78c1-4fba-bd15-2421a96e51d4
-TAVUS_DEPLOYMENT_URL=https://maker.tavus.io/deployments/a53a81d3-78c1-4fba-bd15-2421a96e51d4
-NEXT_PUBLIC_TAVUS_DEPLOYMENT_URL=https://maker.tavus.io/deployments/a53a81d3-78c1-4fba-bd15-2421a96e51d4
+TAVUS_DEPLOYMENT_ID=your_deployment_id
+TAVUS_DEPLOYMENT_URL=https://maker.tavus.io/deployments/your_deployment_id
+NEXT_PUBLIC_TAVUS_DEPLOYMENT_URL=https://maker.tavus.io/deployments/your_deployment_id
 
 # Deep Web Research Providers
 TAVILY_API_KEY=your_tavily_api_key
@@ -198,8 +198,6 @@ OPENROUTER_MODEL=google/gemini-2.0-flash-001
 GEMINI_API_KEY=your_gemini_api_key
 OPENAI_API_KEY=your_openai_api_key
 ```
-
-> **Note**: If `GEMINI_API_KEY` or `OPENROUTER_API_KEY` is provided, LUNA will handle queries dynamically. You can test video capabilities using the default Tavus deployment URL.
 
 ### 4. Run the Development Server
 
