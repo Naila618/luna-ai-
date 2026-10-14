@@ -78,6 +78,7 @@ export default function ChatPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auth guard & redirect
   useEffect(() => {
@@ -96,19 +97,33 @@ export default function ChatPage() {
     }
   }, [preferences]);
 
-  // Load conversations on user ready
+  // Load conversations on user ready: always open a fresh new chat while preserving all previous ones
   useEffect(() => {
     if (user?.uid) {
       const list = loadUserConversations(user.uid);
-      if (list.length > 0) {
-        setConversations(list);
-        setActiveConvId(list[0].id);
-        setIsResearchMode(list[0].isResearch);
+      const pastWithMessages = list.filter((c) => c.messages && c.messages.length > 0);
+
+      // Check if there is already an existing empty conversation at the top
+      const existingEmpty = list.find((c) => !c.messages || c.messages.length === 0);
+
+      let activeConv: Conversation;
+      let allConvs: Conversation[];
+
+      if (existingEmpty) {
+        activeConv = existingEmpty;
+        allConvs = [existingEmpty, ...pastWithMessages];
       } else {
-        const fresh = createNewConversation(user.uid, selectedLanguage, false);
-        setConversations([fresh]);
-        setActiveConvId(fresh.id);
+        activeConv = createNewConversation(user.uid, selectedLanguage, false);
+        allConvs = [activeConv, ...pastWithMessages];
       }
+
+      setConversations(allConvs);
+      setActiveConvId(activeConv.id);
+      setIsResearchMode(activeConv.isResearch || false);
+      setInputText("");
+      setActiveCitations(null);
+      setShowResearchDrawer(false);
+      setTimeout(() => textareaRef.current?.focus(), 100);
     }
   }, [user?.uid]);
 
@@ -122,14 +137,35 @@ export default function ChatPage() {
   // Handle New Conversation
   const handleNewConversation = (research: boolean = false) => {
     if (!user) return;
+
+    // If currently on an empty conversation of the same type, stay on it and focus
+    if (
+      activeConversation &&
+      (!activeConversation.messages || activeConversation.messages.length === 0) &&
+      activeConversation.isResearch === research
+    ) {
+      setIsResearchMode(research);
+      setInputText("");
+      setActiveCitations(null);
+      setShowResearchDrawer(false);
+      setMobileSidebarOpen(false);
+      textareaRef.current?.focus();
+      return;
+    }
+
     const fresh = createNewConversation(user.uid, selectedLanguage, research);
-    setConversations((prev) => [fresh, ...prev]);
+    // Keep past conversations with messages and prepend the fresh one
+    const pastWithMessages = conversations.filter(
+      (c) => (c.messages && c.messages.length > 0) || c.id === fresh.id
+    );
+    setConversations([fresh, ...pastWithMessages]);
     setActiveConvId(fresh.id);
     setIsResearchMode(research);
     setInputText("");
     setActiveCitations(null);
     setShowResearchDrawer(false);
     setMobileSidebarOpen(false);
+    setTimeout(() => textareaRef.current?.focus(), 100);
   };
 
   // Switch Conversation
@@ -712,6 +748,7 @@ export default function ChatPage() {
             <div className="rounded-xl bg-white border border-[#E7E4DC] p-3 shadow-subtle focus-within:border-[#777C55] transition-colors">
               {/* Text Area */}
               <textarea
+                ref={textareaRef}
                 rows={2}
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}

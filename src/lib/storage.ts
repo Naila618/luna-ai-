@@ -66,7 +66,9 @@ export function createNewConversation(
     messages: [],
   };
   const list = loadUserConversations(uid);
-  saveUserConversations(uid, [newConv, ...list]);
+  // Retain all previous conversations that have messages so history is never lost
+  const withMessages = list.filter((c) => c.messages && c.messages.length > 0);
+  saveUserConversations(uid, [newConv, ...withMessages]);
   return newConv;
 }
 
@@ -96,8 +98,10 @@ export function appendMessageToConversation(
   msg: Message
 ): Conversation[] {
   const list = loadUserConversations(uid);
+  let found = false;
   const updated = list.map((c) => {
     if (c.id === convId) {
+      found = true;
       const messages = [...c.messages, msg];
       // Auto update title from first message if default
       let title = c.title;
@@ -116,6 +120,24 @@ export function appendMessageToConversation(
     }
     return c;
   });
+
+  // If conversation was not already in storage, prepend it with the message
+  if (!found) {
+    const newConv: Conversation = {
+      id: convId,
+      title:
+        msg.role === "user"
+          ? msg.content.slice(0, 32) + (msg.content.length > 32 ? "..." : "")
+          : "New Conversation",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      isResearch: msg.isResearch || false,
+      language: msg.language || "en",
+      messages: [msg],
+    };
+    updated.unshift(newConv);
+  }
+
   saveUserConversations(uid, updated);
   return updated;
 }
