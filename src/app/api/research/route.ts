@@ -3,7 +3,7 @@ import { Citation } from "@/types";
 
 export async function POST(req: NextRequest) {
   try {
-    const { query, language = "en" } = await req.json();
+    const { query, language = "en", geminiApiKey } = await req.json();
 
     if (!query || typeof query !== "string") {
       return NextResponse.json({ error: "Search query is required." }, { status: 400 });
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. Gemini Google Search Grounding if Tavily/Brave not configured
-    const geminiKey = process.env.GEMINI_API_KEY;
+    const geminiKey = geminiApiKey || process.env.GEMINI_API_KEY;
     if (!citations.length && geminiKey) {
       try {
         const geminiRes = await fetch(

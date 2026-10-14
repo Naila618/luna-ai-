@@ -24,6 +24,7 @@ import {
   Loader2,
   Copy,
   BookOpen,
+  Key,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthContext";
 import {
@@ -202,13 +203,22 @@ export default function ChatPage() {
     try {
       let citationsResult: Citation[] | undefined = undefined;
 
+      const localGeminiKey =
+        typeof window !== "undefined"
+          ? localStorage.getItem("luna_gemini_api_key") || undefined
+          : undefined;
+
       // If in Research Mode, run deep web research API first
       if (isResearchMode) {
         try {
           const resRes = await fetch("/api/research", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ query: text, language: selectedLanguage }),
+            body: JSON.stringify({
+              query: text,
+              language: selectedLanguage,
+              geminiApiKey: localGeminiKey,
+            }),
           });
           const resData = await resRes.json();
           if (resData.citations && resData.citations.length > 0) {
@@ -236,6 +246,7 @@ export default function ChatPage() {
           preferences,
           language: selectedLanguage,
           isResearch: isResearchMode,
+          geminiApiKey: localGeminiKey,
         }),
       });
 
@@ -621,6 +632,22 @@ export default function ChatPage() {
                       }`}
                     >
                       <div className="whitespace-pre-wrap">{msg.content}</div>
+
+                      {/* Interactive guidance if provider key is missing */}
+                      {!isUser && msg.content.includes("GEMINI_API_KEY") && (
+                        <div className="mt-3 pt-3 border-t border-[#E7E4DC] flex flex-wrap items-center gap-2">
+                          <Link
+                            href="/settings#api-keys"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#777C55] hover:bg-[#5E6341] text-white text-xs font-medium transition-colors shadow-sm"
+                          >
+                            <Key className="w-3.5 h-3.5" />
+                            <span>Configure Gemini Key in Settings</span>
+                          </Link>
+                          <span className="text-[11px] text-[#77786F]">
+                            Takes 10 seconds · Stored securely in your browser
+                          </span>
+                        </div>
+                      )}
 
                       {/* Sources pill if message has citations */}
                       {msg.citations && msg.citations.length > 0 && (

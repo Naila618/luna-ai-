@@ -15,6 +15,8 @@ import {
   AlertCircle,
   Loader2,
   RefreshCw,
+  Key,
+  Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { saveUserConversations } from "@/lib/storage";
@@ -57,6 +59,72 @@ export default function SettingsPage() {
 
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; msg: string } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Gemini API key configuration state
+  const [geminiApiKey, setGeminiApiKey] = useState("");
+  const [showKey, setShowKey] = useState(false);
+  const [testingKey, setTestingKey] = useState(false);
+  const [keyTestStatus, setKeyTestStatus] = useState<{ success: boolean; msg: string } | null>(null);
+  const [keySavedFeedback, setKeySavedFeedback] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("luna_gemini_api_key") || "";
+      setGeminiApiKey(saved);
+    }
+  }, []);
+
+  const handleSaveGeminiKey = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (typeof window !== "undefined") {
+      if (geminiApiKey.trim()) {
+        localStorage.setItem("luna_gemini_api_key", geminiApiKey.trim());
+      } else {
+        localStorage.removeItem("luna_gemini_api_key");
+      }
+      setKeySavedFeedback(true);
+      setTimeout(() => setKeySavedFeedback(false), 3000);
+    }
+  };
+
+  const handleTestGeminiKey = async () => {
+    setTestingKey(true);
+    setKeyTestStatus(null);
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [{ role: "user", content: "Hello Luna, verify connection." }],
+          geminiApiKey: geminiApiKey.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.provider === "gemini") {
+        setKeyTestStatus({
+          success: true,
+          msg: `Connected successfully to Google Gemini (${data.model || "gemini-2.5-flash"}).`,
+        });
+      } else if (data.provider === "openrouter" || data.provider === "openai") {
+        setKeyTestStatus({
+          success: true,
+          msg: `Connected via ${data.provider} (${data.model || ""}).`,
+        });
+      } else {
+        setKeyTestStatus({
+          success: false,
+          msg: data.content || "Provider could not be reached. Please check your key.",
+        });
+      }
+    } catch (e: any) {
+      setKeyTestStatus({
+        success: false,
+        msg: e.message || "Failed to contact chat API.",
+      });
+    } finally {
+      setTestingKey(false);
+    }
+  };
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -343,7 +411,136 @@ export default function SettingsPage() {
           </button>
         </form>
 
-        {/* SECTION 3: PRIVACY & HISTORY */}
+        {/* SECTION 3: AI INTELLIGENCE ENGINE & API KEYS */}
+        <section
+          id="api-keys"
+          className="bg-white p-6 rounded-lg border border-[#E7E4DC] space-y-4 scroll-mt-6"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[#777C55]">
+              <Key className="w-4 h-4" />
+              <span>AI Intelligence Engine (Gemini)</span>
+            </div>
+            {geminiApiKey.trim() && (
+              <span className="px-2 py-0.5 rounded text-[10px] bg-[#EAEDE1] text-[#5E6341] font-medium border border-[#777C55]/30">
+                Custom Key Saved
+              </span>
+            )}
+          </div>
+
+          <p className="text-xs text-[#77786F] leading-relaxed">
+            LUNA is powered by Google Gemini (e.g. Gemini 2.5 Flash). You can enter your Gemini API key below to enable chat and research immediately on both local development and live web preview.
+          </p>
+
+          <form onSubmit={handleSaveGeminiKey} className="space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-[#252720] mb-1">
+                Gemini API Key
+              </label>
+              <div className="relative">
+                <input
+                  type={showKey ? "text" : "password"}
+                  value={geminiApiKey}
+                  onChange={(e) => {
+                    setGeminiApiKey(e.target.value);
+                    setKeyTestStatus(null);
+                  }}
+                  placeholder="Paste your Gemini API key (e.g. AIzaSy... or AQ.Ab8...)"
+                  className="w-full p-2.5 pr-20 rounded border border-[#E7E4DC] bg-[#F7F5F0]/40 text-xs text-[#252720] placeholder-[#77786F]/50 focus:border-[#777C55] font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowKey(!showKey)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-[#77786F] hover:text-[#252720] px-1.5 py-0.5"
+                >
+                  {showKey ? "Hide" : "Show"}
+                </button>
+              </div>
+            </div>
+
+            {keyTestStatus && (
+              <div
+                className={`p-3 rounded text-xs flex items-start gap-2 ${
+                  keyTestStatus.success
+                    ? "bg-[#EAEDE1] text-[#5E6341] border border-[#777C55]/30"
+                    : "bg-[#B95F4B]/10 text-[#B95F4B] border border-[#B95F4B]/30"
+                }`}
+              >
+                {keyTestStatus.success ? (
+                  <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                )}
+                <span>{keyTestStatus.msg}</span>
+              </div>
+            )}
+
+            {keySavedFeedback && (
+              <div className="p-2.5 rounded bg-[#EAEDE1] text-[#5E6341] text-xs flex items-center gap-1.5 border border-[#777C55]/30">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>API key saved to browser storage.</span>
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <button
+                type="submit"
+                className="py-2 px-3.5 rounded bg-[#777C55] hover:bg-[#5E6341] text-white text-xs font-medium transition-colors shadow-sm"
+              >
+                Save Key
+              </button>
+
+              <button
+                type="button"
+                onClick={handleTestGeminiKey}
+                disabled={testingKey}
+                className="py-2 px-3.5 rounded border border-[#E7E4DC] bg-white hover:bg-[#F7F5F0] text-[#252720] text-xs font-medium transition-colors flex items-center gap-1.5"
+              >
+                {testingKey ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="w-3.5 h-3.5 text-[#777C55]" />
+                )}
+                <span>{testingKey ? "Testing..." : "Test Connection"}</span>
+              </button>
+
+              {geminiApiKey.trim() && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGeminiApiKey("");
+                    if (typeof window !== "undefined") {
+                      localStorage.removeItem("luna_gemini_api_key");
+                    }
+                    setKeyTestStatus(null);
+                  }}
+                  className="py-2 px-2.5 text-xs text-[#B95F4B] hover:underline"
+                >
+                  Clear Key
+                </button>
+              )}
+            </div>
+          </form>
+
+          {/* Vercel instructions callout */}
+          <div className="mt-3 p-3.5 rounded bg-[#F7F5F0] border border-[#E7E4DC] text-xs space-y-1.5 text-[#77786F]">
+            <div className="font-medium text-[#252720] flex items-center gap-1.5">
+              <span>🚀 Permanent Vercel Live Deployment Setup</span>
+            </div>
+            <p>
+              To enable Gemini for all visitors on your live website without needing them to enter a key:
+            </p>
+            <ol className="list-decimal list-inside space-y-1 pl-1 text-[11px]">
+              <li>Open your <strong>Vercel Project Dashboard</strong></li>
+              <li>Go to <strong>Settings</strong> &rarr; <strong>Environment Variables</strong></li>
+              <li>Add Name: <code className="bg-white px-1 py-0.5 rounded border border-[#E7E4DC] text-[#252720]">GEMINI_API_KEY</code></li>
+              <li>Add Value: paste your Gemini API key</li>
+              <li>Click <strong>Save</strong> and Redeploy your project!</li>
+            </ol>
+          </div>
+        </section>
+
+        {/* SECTION 4: PRIVACY & HISTORY */}
         <section className="bg-white p-6 rounded-lg border border-[#E7E4DC] space-y-4">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[#777C55]">
             <Shield className="w-4 h-4" />

@@ -3,7 +3,14 @@ import { UserPreferences, SupportedLanguage } from "@/types";
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages, preferences, language = "en", isResearch = false } = await req.json();
+    const {
+      messages,
+      preferences,
+      language = "en",
+      isResearch = false,
+      geminiApiKey,
+      openrouterApiKey,
+    } = await req.json();
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json({ error: "Messages array is required." }, { status: 400 });
@@ -14,70 +21,39 @@ export async function POST(req: NextRequest) {
     // Build personalized system instructions based on onboarding preferences
     const systemPrompt = buildSystemPrompt(preferences, language, isResearch);
 
-    // 1. Try OpenRouter API if configured (Primary)
-    const openrouterKey = process.env.OPENROUTER_API_KEY;
-    if (openrouterKey) {
-      try {
-        const model = process.env.OPENROUTER_MODEL || "google/gemini-2.0-flash-001";
-        const openrouterRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${openrouterKey}`,
-            "HTTP-Referer": "http://localhost:3000",
-            "X-Title": "LUNA AI",
-          },
-          body: JSON.stringify({
-            model,
-            messages: [
-              { role: "system", content: systemPrompt },
-              ...messages.map((m: any) => ({
-                role: m.role === "user" ? "user" : "assistant",
-                content: m.content,
-              })),
-            ],
-            temperature: 0.7,
-            max_tokens: 1200,
-          }),
-        });
-
-        if (openrouterRes.ok) {
-          const data = await openrouterRes.json();
-          const responseText = data.choices?.[0]?.message?.content || "";
-          if (responseText) {
-            return NextResponse.json({
-              content: responseText.trim(),
-              provider: "openrouter",
-              model,
-            });
-          }
-        } else {
-          const errText = await openrouterRes.text();
-          console.warn("OpenRouter API error:", openrouterRes.status, errText);
-        }
-      } catch (e) {
-        console.warn("OpenRouter call failed, falling back:", e);
-      }
-    }
-
-    // 2. Try Google Gemini API if configured
-    const geminiKey = process.env.GEMINI_API_KEY;
+    // 1. Try Google Gemini API (Primary & most reliable)
+    const geminiKey = geminiApiKey || process.env.GEMINI_API_KEY;
     if (geminiKey) {
-      const geminiModels = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-pro"];
+      const geminiModels = [
+        "gemini-2.5-flash",
+        "gemini-flash-latest",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+      ];
+
+      // Sanitize multi-turn history: filter out previous system-notice error messages
+      const validHistory = messages
+        .slice(0, -1)
+        .filter(
+          (m: any) =>
+            m.content &&
+            !m.content.includes("I am unable to reach the AI language provider") &&
+            !m.content.includes("GEMINI_API_KEY")
+        );
+
+      const contents = [
+        ...validHistory.map((m: any) => ({
+          role: m.role === "user" ? "user" : "model",
+          parts: [{ text: m.content || "" }],
+        })),
+        {
+          role: "user",
+          parts: [{ text: lastUserMessage }],
+        },
+      ];
+
       for (const gemModel of geminiModels) {
         try {
-          // Format conversation history for Gemini multi-turn format
-          const contents = [
-            ...messages.slice(0, -1).map((m: any) => ({
-              role: m.role === "user" ? "user" : "model",
-              parts: [{ text: m.content || "" }],
-            })),
-            {
-              role: "user",
-              parts: [{ text: lastUserMessage }],
-            },
-          ];
-
           const geminiRes = await fetch(
             `https://generativelanguage.googleapis.com/v1beta/models/${gemModel}:generateContent?key=${geminiKey}`,
             {
@@ -108,7 +84,8 @@ export async function POST(req: NextRequest) {
               });
             }
           } else {
-            console.warn(`Gemini (${gemModel}) error:`, geminiRes.status);
+            const errText = await geminiRes.text();
+            console.warn(`Gemini (${gemModel}) error ${geminiRes.status}:`, errText);
           }
         } catch (e) {
           console.warn(`Gemini (${gemModel}) call error:`, e);
@@ -116,7 +93,59 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 3. Try OpenAI API if configured
+    // 2. Try OpenRouter API if configured (Secondary fallback)
+    const openrouterKey = openrouterApiKey || process.env.OPENROUTER_API_KEY;
+    if (openrouterKey) {
+      try {
+        const model = process.env.OPENROUTER_MODEL || "deepseek/deepseek-chat";
+        const openrouterRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${openrouterKey}`,
+            "HTTP-Referer": "https://luna-ai-self-eta.vercel.app",
+            "X-Title": "LUNA AI",
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: "system", content: systemPrompt },
+              ...messages
+                .filter(
+                  (m: any) =>
+                    m.content &&
+                    !m.content.includes("I am unable to reach the AI language provider")
+                )
+                .map((m: any) => ({
+                  role: m.role === "user" ? "user" : "assistant",
+                  content: m.content,
+                })),
+            ],
+            temperature: 0.7,
+            max_tokens: 1200,
+          }),
+        });
+
+        if (openrouterRes.ok) {
+          const data = await openrouterRes.json();
+          const responseText = data.choices?.[0]?.message?.content || "";
+          if (responseText) {
+            return NextResponse.json({
+              content: responseText.trim(),
+              provider: "openrouter",
+              model,
+            });
+          }
+        } else {
+          const errText = await openrouterRes.text();
+          console.warn("OpenRouter API error:", openrouterRes.status, errText);
+        }
+      } catch (e) {
+        console.warn("OpenRouter call failed, falling back:", e);
+      }
+    }
+
+    // 3. Try OpenAI API if configured (Tertiary fallback)
     const openaiKey = process.env.OPENAI_API_KEY;
     if (openaiKey) {
       try {
@@ -130,10 +159,16 @@ export async function POST(req: NextRequest) {
             model: "gpt-4o-mini",
             messages: [
               { role: "system", content: systemPrompt },
-              ...messages.map((m: any) => ({
-                role: m.role === "user" ? "user" : "assistant",
-                content: m.content,
-              })),
+              ...messages
+                .filter(
+                  (m: any) =>
+                    m.content &&
+                    !m.content.includes("I am unable to reach the AI language provider")
+                )
+                .map((m: any) => ({
+                  role: m.role === "user" ? "user" : "assistant",
+                  content: m.content,
+                })),
             ],
             temperature: 0.7,
           }),
@@ -157,10 +192,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       content:
         language === "hi"
-          ? "मैं इस समय अपने भाषा मॉडल से संपर्क नहीं कर पा रही हूँ। कृपया सुनिश्चित करें कि आपकी API कुंजी सक्रिय है।"
+          ? "मैं इस समय AI मॉडल से संपर्क नहीं कर पा रही हूँ। कृपया सुनिश्चित करें कि आपकी GEMINI_API_KEY सक्रिय है (.env.local में या Vercel पर्यावरण चर में, अथवा सेटिंग्स में अपनी API कुंजी दर्ज करें)।"
           : language === "te"
-          ? "నేను ప్రస్తుతం AI మోడల్‌తో కనెక్ట్ అవ్వలేకపోతున్నాను. దయచేసి API కీ యాక్టివ్‌గా ఉందో లేదో తనిఖీ చేయండి."
-          : "I am unable to reach the AI language provider right now. Please verify your GEMINI_API_KEY or OPENROUTER_API_KEY in .env.local.",
+          ? "నేను ప్రస్తుతం AI మోడల్‌తో కనెక్ట్ అవ్వలేకపోతున్నాను. దయచేసి మీ GEMINI_API_KEY సరిగ్గా కాన్ఫిగర్ చేయబడిందో లేదో తనిఖీ చేయండి (.env.local లేదా Vercel సెట్టింగ్స్‌లో, లేదా సెట్టింగ్స్‌లో కీని నమోదు చేయండి)."
+          : "I am unable to reach the AI language provider right now. Please verify your GEMINI_API_KEY in .env.local (for local development) or in your Vercel Project Settings > Environment Variables (for live deployment). You can also configure your Gemini API Key directly in Settings.",
       provider: "system-notice",
     });
   } catch (error: any) {
